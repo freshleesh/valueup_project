@@ -15,16 +15,17 @@ en_tool_list = ["grinder","nipper", "scissors", "ruler", "hammer", "hammer", "pl
 bring_list = ["갖","가져다주","갖다주","가지"]
 kkma=Kkma()
 file_name='sample.mp3'
-openai.api_key = "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" # API Key
+openai.api_key = "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" # API Key
 r = sr.Recognizer()
 m = sr.Microphone()
 turn_off_flag=False
-
+recog_flag=True
 rospy.init_node('listener')
 ans_pub=rospy.Publisher("tool_list",String,queue_size=1)
+ex_answer=''
 
 def callback(r, audio):
-    global turn_off_flag
+    global turn_off_flag, recog_flag, ex_answer
     text=''
     try:
         text = r.recognize_google(audio, language='ko')
@@ -43,7 +44,7 @@ def callback(r, audio):
             
         else:
             order_flag, spoken_tool=sentence_analysis(full_text)
-            if order_flag is True:
+            if order_flag is 0:
                 answer=' '.join(spoken_tool)
                 answer=answer+'를 가져올게요'
                 print("[자바스] "+answer)
@@ -55,6 +56,12 @@ def callback(r, audio):
                 words_str = ' '.join(en_tool_answer)
                 ans_pub.publish(words_str)
                 speaker(answer)
+
+            elif order_flag is 1:
+                answer='그 물건은 가져올 수 없어요'
+                print("[자바스] "+answer)
+                speaker(answer)
+
             else:
                 # API 요청 및 응답 받기
                 text= text + '3줄 이하로 간결하게 설명해줘'
@@ -64,14 +71,15 @@ def callback(r, audio):
                 )
 
                 # API 응답에서 답변 텍스트 추출
-                gpt_answer = completion.choices[0].message['content']
+                answer = completion.choices[0].message['content']
 
-                print("[자바스] "+gpt_answer)
-                speaker(gpt_answer)
-            
+                print("[자바스] "+answer)
+                speaker(answer)
+        recog_flag=True    
+        ex_answer=answer
+        
     except sr.UnknownValueError:
-        pass
-        # print("[자바스] 인식에 실패하였습니다")
+        recog_flag=False
     except sr.RequestError as e:
         print(f"[자바스] 서버 연결에 실패하였습니다 : {e}")
 
@@ -81,14 +89,13 @@ def speaker(text):
     playsound(file_name)
     if os.path.exists(file_name):
         os.remove(file_name)
-    
+
 def sentence_analysis(sentence):
     '''문장에서 도구와 가져오라는 명령이 포함되면 Ture를 반환한다.'''
     tool_flag=False
-    bring_flag=False
+    bring_flag=0
     pos_tags = kkma.pos(sentence)
     spoken_tool=[]
-
     #품사와 함께 반환
 
     vv_words = [word for word, pos in pos_tags if pos == 'VV']
@@ -103,14 +110,21 @@ def sentence_analysis(sentence):
             if word == bring:
                 bring_flag=True
     if bring_flag is True and tool_flag is True:
-        return True, spoken_tool
+        return 0, spoken_tool
+    elif bring_flag is True and tool_flag is False:
+        return 1, spoken_tool
     else:
-        return False, spoken_tool
+        return 2, spoken_tool
 
 with m as source:
     r.adjust_for_ambient_noise(m)
     print("[자바스] 인식을 시작합니다")
     while turn_off_flag==False:
+        if recog_flag==True:
+            print("[자바스] 듣고있어요")
         audio=r.listen(m,phrase_time_limit=5) # phrase_time_limit = 말을 시작했을때 듣는 최대 시간
         callback(r,audio)
+
+        
+        
 
